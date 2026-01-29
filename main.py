@@ -4,6 +4,7 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 import time
+import re # 引入正規表達式來處理多餘換行
 
 app = FastAPI()
 
@@ -114,31 +115,38 @@ def get_content_api(url: str = Query(..., description="公告的網址")):
 
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # 1. 抓取內容區塊 (優先抓 .meditor)
+        # 1. 抓取內容區塊
         content_div = soup.select_one('.meditor') or soup.select_one('.mpgdetail') or soup.select_one('.art-text') or soup.select_one('.module-detail')
         
         text_content = ""
         if content_div:
-            # 取得原始文字 (保留換行)
             raw_text = content_div.get_text(separator='\n', strip=True)
+            lines = raw_text.split('\n')
             
-            # --- 這裡是你要的簡單粗暴區 ---
-            lines = raw_text.split('\n') # 把文字切成一行一行
-            
-            # 如果行數超過 12 行，就只保留第 13 行之後的
-            # 這裡的 12 是你剛剛算出來的，如果不夠可以自己改數字
+            # --- 步驟A: 物理切除前 12 行 ---
             if len(lines) > 12:
-                # [12:] 代表從索引 12 (第13行) 開始取到最後
-                cleaned_lines = lines[12:] 
-                text_content = "\n".join(cleaned_lines).strip()
-            else:
-                # 萬一行數太少 (例如有些舊公告沒有那些標頭)，就不要砍，避免把內文砍光
-                text_content = raw_text
-                
+                lines = lines[12:]
+            
+            # --- 步驟B: 移除開頭的空行 (直到遇到文字) ---
+            # 這是解決「文章開頭莫名空白」的關鍵
+            while lines and not lines[0].strip():
+                lines.pop(0)
+
+            # --- 步驟C: 移除結尾的空行 ---
+            while lines and not lines[-1].strip():
+                lines.pop()
+            
+            # 組合回去
+            text_content = "\n".join(lines)
+            
+            # --- 步驟D: 壓縮中間過多的換行 (超過3個換行變成2個) ---
+            # 這樣文章中間才不會因為排版導致空一大塊
+            text_content = re.sub(r'\n{3,}', '\n\n', text_content)
+
         else:
             text_content = "無文字內容"
 
-        # 2. 抓取附件連結 (這部分保持不變)
+        # 2. 抓取附件連結
         attachments = []
         possible_areas = []
         attach_area = soup.select_one('.mptattach')
