@@ -1,14 +1,14 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
+from datetime import datetime
 import time
 
 app = FastAPI()
 
 cached_data = []
 last_scrape_time = 0
-CACHE_DURATION = 43200
+CACHE_DURATION = 600
 
 def scrape_cssh_news():
     url = "https://www.cssh.ntpc.edu.tw/p/428-1000-1.php?Lang=zh-tw"
@@ -65,7 +65,7 @@ def scrape_cssh_news():
 
 @app.get("/")
 def home():
-    return {"message": "/news"}
+    return {"message": "歡迎使用清水高中公告 API，請訪問 /news 取得列表，或 /content?url=... 取得內文"}
 
 @app.get("/news")
 def get_news():
@@ -91,3 +91,36 @@ def get_news():
         "updated_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         "data": cached_data
     }
+
+# --- 新增：爬取內文的 API ---
+@app.get("/content")
+def get_content_api(url: str = Query(..., description="公告的網址")):
+    """
+    輸入公告網址，回傳內文
+    """
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+
+    try:
+        response = requests.get(url, headers=headers)
+        response.encoding = 'utf-8'
+        
+        if response.status_code != 200:
+            return {"error": "無法連線到該網址", "status_code": response.status_code}
+
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        # 針對 Rpage 系統抓取主要內容區塊
+        # 策略：嘗試找 .mptattach (常見內容區) 或 .mpgdetail (通用詳細區)
+        content_div = soup.select_one('.mptattach') or soup.select_one('.mpgdetail') or soup.select_one('.module-detail') or soup.select_one('.art-text')
+
+        if content_div:
+            # get_text 使用 separator='\n' 可以保留換行，讓排版好看一點
+            text_content = content_div.get_text(separator='\n', strip=True)
+            return {"url": url, "content": text_content}
+        else:
+            return {"error": "找不到內容區塊，可能網頁結構不同", "url": url}
+
+    except Exception as e:
+        return {"error": str(e)}
