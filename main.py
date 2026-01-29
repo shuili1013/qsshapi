@@ -114,14 +114,22 @@ def get_content_api(url: str = Query(..., description="公告的網址")):
 
         soup = BeautifulSoup(response.text, 'html.parser')
         
+        # 1. 抓取文字內容
         content_div = soup.select_one('.mpgdetail') or soup.select_one('.art-text') or soup.select_one('.module-detail')
         
         text_content = ""
         if content_div:
+            # --- 關鍵修正：移除 Metadata (作者/日期/分類) ---
+            # .mhd 是 Rpage 系統存放標頭資訊的區塊
+            for junk in content_div.select('.mhd, .base-info'):
+                junk.decompose()
+            
+            # 取得剩下的乾淨文字
             text_content = content_div.get_text(separator='\n', strip=True)
         else:
             text_content = "無文字內容"
 
+        # 2. 抓取附件連結
         attachments = []
         possible_areas = []
         attach_area = soup.select_one('.mptattach')
