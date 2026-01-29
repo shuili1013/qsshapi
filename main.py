@@ -114,22 +114,31 @@ def get_content_api(url: str = Query(..., description="公告的網址")):
 
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # 1. 抓取文字內容
-        content_div = soup.select_one('.mpgdetail') or soup.select_one('.art-text') or soup.select_one('.module-detail')
+        # 1. 抓取內容區塊 (優先抓 .meditor)
+        content_div = soup.select_one('.meditor') or soup.select_one('.mpgdetail') or soup.select_one('.art-text') or soup.select_one('.module-detail')
         
         text_content = ""
         if content_div:
-            # --- 關鍵修正：移除 Metadata (作者/日期/分類) ---
-            # .mhd 是 Rpage 系統存放標頭資訊的區塊
-            for junk in content_div.select('.mhd, .base-info'):
-                junk.decompose()
+            # 取得原始文字 (保留換行)
+            raw_text = content_div.get_text(separator='\n', strip=True)
             
-            # 取得剩下的乾淨文字
-            text_content = content_div.get_text(separator='\n', strip=True)
+            # --- 這裡是你要的簡單粗暴區 ---
+            lines = raw_text.split('\n') # 把文字切成一行一行
+            
+            # 如果行數超過 12 行，就只保留第 13 行之後的
+            # 這裡的 12 是你剛剛算出來的，如果不夠可以自己改數字
+            if len(lines) > 12:
+                # [12:] 代表從索引 12 (第13行) 開始取到最後
+                cleaned_lines = lines[12:] 
+                text_content = "\n".join(cleaned_lines).strip()
+            else:
+                # 萬一行數太少 (例如有些舊公告沒有那些標頭)，就不要砍，避免把內文砍光
+                text_content = raw_text
+                
         else:
             text_content = "無文字內容"
 
-        # 2. 抓取附件連結
+        # 2. 抓取附件連結 (這部分保持不變)
         attachments = []
         possible_areas = []
         attach_area = soup.select_one('.mptattach')
