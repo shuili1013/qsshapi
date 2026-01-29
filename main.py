@@ -1,10 +1,19 @@
 from fastapi import FastAPI, Query
+from fastapi.middleware.cors import CORSMiddleware
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 import time
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 cached_data = []
 last_scrape_time = 0
@@ -65,7 +74,7 @@ def scrape_cssh_news():
 
 @app.get("/")
 def home():
-    return {"message": "/news or /content?url=  to use the API"}
+    return {"message": "/news or /content?url= to use the API"}
 
 @app.get("/news")
 def get_news():
@@ -94,9 +103,6 @@ def get_news():
 
 @app.get("/content")
 def get_content_api(url: str = Query(..., description="公告的網址")):
-    """
-    輸入公告網址，回傳內文
-    """
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
@@ -110,12 +116,9 @@ def get_content_api(url: str = Query(..., description="公告的網址")):
 
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # 針對 Rpage 系統抓取主要內容區塊
-        # 策略：嘗試找 .mptattach (常見內容區) 或 .mpgdetail (通用詳細區)
         content_div = soup.select_one('.mptattach') or soup.select_one('.mpgdetail') or soup.select_one('.module-detail') or soup.select_one('.art-text')
 
         if content_div:
-            # get_text 使用 separator='\n' 可以保留換行，讓排版好看一點
             text_content = content_div.get_text(separator='\n', strip=True)
             return {"url": url, "content": text_content}
         else:
