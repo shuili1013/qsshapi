@@ -74,12 +74,11 @@ def scrape_cssh_news():
 
 @app.get("/")
 def home():
-    return {"message": "/news or /content?url= to use the API"}
+    return {"message": "API is running. Use /news or /content?url=..."}
 
 @app.get("/news")
 def get_news():
     global cached_data, last_scrape_time
-    
     current_time = time.time()
     
     if cached_data and (current_time - last_scrape_time < CACHE_DURATION):
@@ -90,7 +89,6 @@ def get_news():
         }
     
     new_data = scrape_cssh_news()
-    
     if new_data:
         cached_data = new_data
         last_scrape_time = current_time
@@ -115,14 +113,47 @@ def get_content_api(url: str = Query(..., description="公告的網址")):
             return {"error": "無法連線到該網址", "status_code": response.status_code}
 
         soup = BeautifulSoup(response.text, 'html.parser')
-
-        content_div = soup.select_one('.mptattach') or soup.select_one('.mpgdetail') or soup.select_one('.module-detail') or soup.select_one('.art-text')
-
+        
+        content_div = soup.select_one('.mpgdetail') or soup.select_one('.art-text') or soup.select_one('.module-detail')
+        
+        text_content = ""
         if content_div:
             text_content = content_div.get_text(separator='\n', strip=True)
-            return {"url": url, "content": text_content}
         else:
-            return {"error": "找不到內容區塊，可能網頁結構不同", "url": url}
+            text_content = "無文字內容"
+
+        attachments = []
+        possible_areas = []
+        attach_area = soup.select_one('.mptattach')
+        
+        if attach_area: possible_areas.append(attach_area)
+        if content_div: possible_areas.append(content_div)
+
+        found_links = set()
+
+        for area in possible_areas:
+            for a_tag in area.select('a'):
+                href = a_tag.get('href')
+                text = a_tag.get_text(strip=True)
+
+                if href and not href.lower().startswith('javascript') and href != '#':
+                    if href.startswith('/'):
+                        full_link = f"https://www.cssh.ntpc.edu.tw{href}"
+                    else:
+                        full_link = href
+
+                    if full_link not in found_links:
+                        attachments.append({
+                            "title": text,
+                            "link": full_link
+                        })
+                        found_links.add(full_link)
+
+        return {
+            "url": url,
+            "content": text_content,
+            "attachments": attachments
+        }
 
     except Exception as e:
         return {"error": str(e)}
