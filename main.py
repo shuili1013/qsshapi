@@ -65,7 +65,7 @@ def scrape_cssh_news():
 
 @app.get("/")
 def home():
-    return {"message": "歡迎使用清水高中公告 API，請訪問 /news 取得列表，或 /content?url=... 取得內文"}
+    return {"message": "/news or /content?url=  to use the API"}
 
 @app.get("/news")
 def get_news():
@@ -92,7 +92,6 @@ def get_news():
         "data": cached_data
     }
 
-# --- 新增：爬取內文的 API ---
 @app.get("/content")
 def get_content_api(url: str = Query(..., description="公告的網址")):
     """
